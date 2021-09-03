@@ -1,8 +1,36 @@
 const express = require('express')
 const router = express.Router()
 const mysql = require('../mysql').pool
+const multer= require('multer')
+
+
+const storage = multer.diskStorage({
+    destination: function (request, file, callback) {
+        callback(null, './uploads/');
+    },
+    filename: function(request, file, callback) {
+        callback(null, file.originalname);
+    }
+});
+
+const fileFilter = (request, file, callback) => {
+    if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+        callback(null, true);
+    } else {
+        callback(null, false);
+    }
+}
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 1024 * 1024 * 5
+    },
+    fileFilter: fileFilter
+});
 //todos os produtos
 router.get('/', (request, response, next) => {
+ 
   mysql.getConnection((error, conn) => {
     if (error) {
       return response.status(500).send({ error: error })
@@ -12,32 +40,63 @@ router.get('/', (request, response, next) => {
       if (error) {
         return response.status(500).send({ error: error })
       }
-      response.status(201).send({ response: result })
+      const res = {
+        quantidade: result.length,
+        produtos: result.map(prod => {
+          return {
+            id: prod.id,
+            nome: prod.nome,
+            preco: prod.preco,
+            request: {
+              tipo: 'GET',
+              descrição: 'produto em especifico',
+              url: 'http://localhost:3000/produtos/' + prod.id
+            }
+          }
+        })
+      }
+
+      return response.status(200).send({ response: res })
     })
   })
 })
+
 //insere produtos
-router.post('/', (request, response, next) => {
+router.post('/',upload.single('produto-imagem'), (request, response, next) => {
+   console.log(request.file)
   mysql.getConnection((error, conn) => {
     if (error) {
       return response.status(500).send({ error: error })
     }
     conn.query(
-      'INSERT INTO produtos (nome,preco) VALUES(?,?)',
-      ['ruben andre', 45],
+      'INSERT INTO produtos (nome,preco,produto_imagem) VALUES(?,?,?)',
+      [request.body.nome, request.body.preco, request.file.path],
       (error, result, field) => {
         conn.release()
         if (error) {
           return response.status(500).send({ error: error })
         }
-        response.status(201).send({
-          message: 'produto inserido',
-          id_produto: result.insetId
-        })
+        const res = {
+          mensagem: 'produto inserido',
+          ProdutoCriado: {
+            id: result.id,
+            nome: request.body.nome,
+            preco: request.body.preco,
+            path: request.body.path,
+            request: {
+              tipo: 'GET',
+              descrição: 'Todos os produtos',
+              url: 'http://localhost:3000/produtos/'
+            }
+          }
+        }
+
+        return response.status(200).send({ res })
       }
     )
   })
 })
+
 //um produto especifico
 router.get('/:id_produto', (request, response, next) => {
   mysql.getConnection((error, conn) => {
@@ -52,11 +111,29 @@ router.get('/:id_produto', (request, response, next) => {
         if (error) {
           return response.status(500).send({ error: error })
         }
-        response.status(201).send({ response: result })
+        if (result.length === 0) {
+          return response.status(404).send({ mensagem: 'Não encontrado' })
+        }
+        const res = {
+          produto: {
+            id: result[0].id,
+            nome: result[0].nome,
+            preco: result[0].preco,
+            request: {
+              tipo: 'GET',
+              descrição: 'Todos os produtos',
+              url: 'http://localhost:3000/produtos/'
+            }
+          }
+        }
+
+        return response.status(200).send({ response: res })
       }
     )
   })
 })
+
+//altera produto
 
 router.patch('/', (request, response, next) => {
   mysql.getConnection((error, conn) => {
@@ -68,37 +145,61 @@ router.patch('/', (request, response, next) => {
            SET nome= ?,
            preco= ? 
            WHERE id= ?`,
-      ['Ruben André', 4550.2,2],
+      [request.body.nome,request.body.preco, request.body.id],
       (error, result, field) => {
         conn.release()
         if (error) {
           return response.status(500).send({ error: error })
         }
-        response.status(201).send({
-          message: 'produto alterado'
-        })
+        const res = {
+          mensagem: 'produto alterado',
+          ProdutoAlterado: {
+            id: request.body.id,
+            nome: request.body.nome,
+            preco: request.body.preco,
+            request: {
+              tipo: 'GET',
+              descrição: 'Detalhes de um produto',
+              url: 'http://localhost:3000/produtos/'+'7'
+            }
+          }
+        }
+
+        return response.status(200).send({ res })
       }
     )
   })
 })
-//insere produtos
+
+//deleta produto
 router.delete('/', (request, response, next) => {
-   mysql.getConnection((error, conn) => {
+  mysql.getConnection((error, conn) => {
     if (error) {
       return response.status(500).send({ error: error })
     }
     conn.query(
       `DELETE FROM  produtos
            WHERE id= ?`,
-      [3],
+      [11],
       (error, result, field) => {
         conn.release()
         if (error) {
           return response.status(500).send({ error: error })
         }
-        response.status(201).send({
-          message: 'produto deletado'
-        })
+        const res = {
+          mensagem: 'produto removido',
+          request: {
+            tipo: 'POST',
+            descrição: 'Insere produto',
+            url: 'http://localhost:3000/produtos/',
+            body: {
+              nome: 'string',
+              preco: 'number'
+            }
+          }
+        }
+
+        return response.status(200).send({ res })
       }
     )
   })
