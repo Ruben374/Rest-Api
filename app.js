@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 
 
 app.use((req, res, next) => {
-    const erro = new Error('Não encontrado');
+    const erro = new Error('Pagina não encontrada 404');
     erro.status = 404;
     next(erro);
 });
